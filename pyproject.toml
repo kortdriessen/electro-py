@@ -1,0 +1,23 @@
+[project]
+name = "electro-py"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Kort Driessene", email = "driessenkort@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.3.3",
+    "pandas>=2.3.2",
+    "polars>=1.33.1",
+    "pyyaml>=6.0.2",
+    "scipy>=1.16.2",
+    "seaborn>=0.13.2",
+    "tdt>=0.6.8",
+    "xarray>=2025.9.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
