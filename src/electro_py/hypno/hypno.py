@@ -1,7 +1,7 @@
 import pandas as pd
 import yaml
 from pathlib import Path
-from kdephys.hypno.ecephys_hypnogram import Hypnogram, DatetimeHypnogram
+#from kdephys.hypno.ecephys_hypnogram import Hypnogram, DatetimeHypnogram
 import numpy as np
 
 def _infer_bout_start(df, bout):
