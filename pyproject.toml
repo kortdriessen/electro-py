@@ -4,14 +4,16 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "Kort Driessene", email = "driessenkort@gmail.com" }
+    { name = "Kort Driessen", email = "driessenkort@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "black>=25.1.0",
     "numpy>=2.3.3",
     "pandas>=2.3.2",
     "polars>=1.33.1",
     "pyyaml>=6.0.2",
+    "ruff>=0.13.0",
     "scipy>=1.16.2",
     "seaborn>=0.13.2",
     "tdt>=0.6.8",
@@ -21,3 +23,38 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Build one wheel that contains both import packages.
+[tool.hatch.build.targets.wheel]
+packages = [
+  "src/electro_py",
+]
+
+# (Optional but nice for source distributions)
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/electro_py/**",
+  "README.md",
+  "pyproject.toml",
+]
+
+# -------------------------------- FORMATTING AND LINTING -------------------------------
+
+[tool.black]
+# Accept all Black defaults (88 col, etc.); line-length shown for clarity only.
+line-length = 88
+target-version = ["py312"]  # adjust to your project min version, e.g., "py310"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+unsafe-fixes = true
+preview = true
+
+[tool.ruff.lint]
+# Sensible, low-noise rule set; add more later as you like.
+select = ["E", "F", "I", "B", "UP"]  # pycodestyle, pyflakes, isort, bugbear, pyupgrade
+
+[tool.ruff.lint.isort]
+# Let Ruff handle import ordering; set your package name(s) here:
+known-first-party = ["electro_py"]
