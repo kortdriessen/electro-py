@@ -55,7 +55,7 @@ def sev_to_xarray(info, store, start_date=None):
         Name: The store name
     """
     try:
-        n_channels, n_samples = store.data.shape
+        _n_channels, n_samples = store.data.shape
     except ValueError:
         n_samples = store.data.shape[0]
 
