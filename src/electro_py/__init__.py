@@ -3,5 +3,6 @@ from . import hypno as hypno
 from . import plot as plot
 from . import sigpro as sigpro
 from . import tdt as tdt
+from . import util as util
 
-__all__ = ["tdt", "hypno", "sigpro", "plot"]
+__all__ = ["tdt", "hypno", "sigpro", "plot", "util"]
