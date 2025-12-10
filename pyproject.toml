@@ -16,6 +16,7 @@ dependencies = [
     "ruff>=0.13.0",
     "scipy>=1.16.2",
     "seaborn>=0.13.2",
+    "spikeinterface>=0.103.2",
     "tdt>=0.6.8",
     "xarray>=2025.9.0",
 ]

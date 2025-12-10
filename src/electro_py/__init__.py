@@ -5,5 +5,6 @@ from . import sigpro as sigpro
 from . import tdt as tdt
 from . import util as util
 from . import gen as gen
+from . import mua as mua
 
-__all__ = ["tdt", "hypno", "sigpro", "plot", "util", "gen"]
+__all__ = ["tdt", "hypno", "sigpro", "plot", "util", "gen", "mua"]

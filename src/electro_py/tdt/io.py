@@ -19,6 +19,11 @@ def load_tdt_block(path: str, t1: int = 0, t2: int = 0):
     return tdt.read_block(path, t1=t1, t2=t2)
 
 
+def load_tdt_epocs(blockpath: str, evtype: list[str] = ["epocs"]):
+    blk = tdt.read_block(blockpath, evtype=evtype)
+    return blk.epocs
+
+
 def load_sev_store(
     path: str,
     t1: int = 0,
