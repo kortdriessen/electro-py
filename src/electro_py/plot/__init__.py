@@ -8,5 +8,8 @@ from . import (
 from . import (
     utils as utils,
 )
+from . import (
+    raw as raw,
+)
 
-__all__ = ["spectro", "utils"]
+__all__ = ["spectro", "utils", "raw"]
