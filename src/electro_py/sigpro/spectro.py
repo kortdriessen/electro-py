@@ -4,7 +4,7 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import xarray as xr
-from scipy.signal import spectrogram
+from scipy.signal import butter, sosfiltfilt, spectrogram
 
 bands = {}
 bands["delta"] = (0.5, 4.0)
@@ -384,3 +384,13 @@ def get_bp_set(spg, bands=bands):
     bp_set = bp_ds.assign(**bp_vars)
 
     return bp_set
+
+
+def bandpass_filter_raw_data(sig, f_range):
+    fs = sig.fs
+    nyq = fs / 2.0
+    low = f_range[0] / nyq
+    high = f_range[1] / nyq
+    sos = butter(4, [low, high], btype="band", output="sos")
+    filtered = sosfiltfilt(sos, sig.values, axis=sig.dims.index("datetime"))
+    return xr.DataArray(filtered, dims=sig.dims, coords=sig.coords, attrs=sig.attrs)
