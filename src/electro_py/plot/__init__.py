@@ -3,13 +3,16 @@ subpackage for plotting
 """
 
 from . import (
+    hypno as hypno,
+)
+from . import (
+    raw as raw,
+)
+from . import (
     spectro as spectro,
 )
 from . import (
     utils as utils,
 )
-from . import (
-    raw as raw,
-)
 
-__all__ = ["spectro", "utils", "raw"]
+__all__ = ["spectro", "utils", "raw", "hypno"]

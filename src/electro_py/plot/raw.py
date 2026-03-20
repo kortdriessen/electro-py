@@ -1,6 +1,6 @@
 # Functions for plotting raw data
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
 
 
@@ -104,13 +104,14 @@ def atomic_raster(
     assert xname in mua_df.columns, f"xname {xname} not in mua_df"
     assert yname in mua_df.columns, f"yname {yname} not in mua_df"
 
+    plt.rcdefaults()
     f, ax = plt.subplots(figsize=figsize)
     ax = sns.scatterplot(
         mua_df, x=xname, y=yname, linewidth=0, alpha=alpha, s=s, ax=ax, color=color
     )
-    ax.set_xlim()
-    ax.set_yticks([])
-    ax.set_xticks([])
+    # ax.set_xlim()
+    # ax.set_yticks([])
+    # ax.set_xticks([])
     plt.tight_layout()
     return f, ax
 
