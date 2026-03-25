@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 
 hypno_colors = {
     "Wake": "#62e273",
@@ -26,9 +25,9 @@ def shade_hypno_for_me(hypnogram, ax=None, xlim=None, ymin=0, ymax=1, alpha=0.15
 
     Parameters
     ----------
-    hypnogram: pandas.DataFrame
-        Hypnogram with with state, start_time, end_time columns.
-    ax: matplotlib.Axes, optional
+    hypnogram : Hypnogram or any iterable of bouts with
+        ``state``, ``start_time``, ``end_time`` attributes.
+    ax : matplotlib.Axes, optional
         An axes upon which to plot.
     """
     xlim = ax.get_xlim() if (ax and not xlim) else xlim
@@ -57,23 +56,25 @@ def plot_basic_hypnogram(
     xlim=None,
     style_path=None,
     single_tone=False,
+    state_colors=None,
 ):
-    state_colors = {}
-    if single_tone:
-        # GRAY SCALE
-        state_colors["Wake"] = (1, "#333333")
-        state_colors["NREM"] = (2, "#4f4f4f")
-        state_colors["REM"] = (3, "#797979")
+    state_colors = state_colors if state_colors is not None else {}
+    if state_colors == {}:
+        if single_tone:
+            # GRAY SCALE
+            state_colors["Wake"] = (1, "#333333")
+            state_colors["NREM"] = (2, "#4f4f4f")
+            state_colors["REM"] = (3, "#797979")
 
-        # REDS
-        state_colors["Wake"] = (1, "#6E2032")
-        state_colors["NREM"] = (2, "#983F3F")
-        state_colors["REM"] = (3, "#C88E87")
+            # REDS
+            state_colors["Wake"] = (1, "#6E2032")
+            state_colors["NREM"] = (2, "#983F3F")
+            state_colors["REM"] = (3, "#C88E87")
 
-    else:
-        state_colors["NREM"] = (2, "#4b71e3")
-        state_colors["REM"] = (3, "#e34bde")
-        state_colors["Wake"] = (1, "#4be350")
+        else:
+            state_colors["NREM"] = (2, "#4b71e3")
+            state_colors["REM"] = (3, "#e34bde")
+            state_colors["Wake"] = (1, "#4be350")
 
     # plt.rcdefaults()
     if style_path is not None:
@@ -88,14 +89,13 @@ def plot_basic_hypnogram(
     if xlim is not None:
         ax.set_xlim(xlim)
     else:
-        ax.set_xlim(h.start_time.min(), h.end_time.max())
+        ax.set_xlim(h.start, h.end)
 
-    # Add small epsilon to avoid exact overlap - TODO: this needs to be fixed to automatically adjust based on the time units of the hypnogram (e.g. seconds vs milliseconds)
-    epsilon = pd.Timedelta(milliseconds=1)
     epsilon = 0.001
 
-    for i, bout in enumerate(h.itertuples()):
-        if bout.state in state_colors.keys():
+    prev_end = None
+    for bout in h.itertuples():
+        if bout.state in state_colors:
             value, color = state_colors[bout.state]
         else:
             value, color = state_colors["Wake"]
@@ -103,14 +103,12 @@ def plot_basic_hypnogram(
         y_range = (value - 1, value)
         y_range = (y_range[0] / 3, y_range[1] / 3)
 
-        # Adjust end time of previous bout if there's an overlap
         start_time = bout.start_time
         end_time = bout.end_time
 
         # Ensure no overlap with previous bout
-        if i > 0 and start_time <= h.iloc[i - 1].end_time:
-            # Set start time to just after previous bout's end time
-            start_time = h.iloc[i - 1].end_time + epsilon
+        if prev_end is not None and start_time <= prev_end:
+            start_time = prev_end + epsilon
 
         ax.axvspan(
             start_time,
@@ -121,6 +119,7 @@ def plot_basic_hypnogram(
             alpha=1,
             linewidth=0,
         )
+        prev_end = end_time
 
     ax.set_yticks([])
 
