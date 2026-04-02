@@ -392,5 +392,93 @@ def bandpass_filter_raw_data(sig, f_range):
     low = f_range[0] / nyq
     high = f_range[1] / nyq
     sos = butter(4, [low, high], btype="band", output="sos")
-    filtered = sosfiltfilt(sos, sig.values, axis=sig.dims.index("datetime"))
+    filtered = sosfiltfilt(sos, sig.values, axis=sig.dims.index("time"))
     return xr.DataArray(filtered, dims=sig.dims, coords=sig.coords, attrs=sig.attrs)
+
+from scipy.signal import butter, sosfiltfilt, hilbert, spectrogram as scipy_spectrogram
+import xarray as xr
+import time as timer
+
+bands = {
+    'delta': (0.5, 4),
+    'theta': (4, 8),
+    'alpha': (8, 12),
+    'sigma': (11, 16),
+    'beta': (12, 30),
+    'gamma': (30, 100)
+}
+
+def bandpower_hilbert(
+    signal: np.ndarray,
+    fs: float,
+    bands: dict[str, tuple[float, float]] = bands,
+    time: np.ndarray | None = None,
+    filter_order: int = 4,
+    smooth_sec: float | None = None,
+) -> xr.Dataset:
+    """Compute instantaneous bandpower via Hilbert envelope.
+
+    For each band: Butterworth bandpass filter → Hilbert transform → |analytic signal|².
+    Returns power at the original sampling rate (true instantaneous estimate).
+
+    Parameters
+    ----------
+    signal : 1D array
+        Raw EEG signal.
+    fs : float
+        Sampling rate in Hz.
+    bands : dict
+        ``{name: (low_hz, high_hz)}`` frequency bands.
+    time : 1D array, optional
+        Time coordinates for the output. If None, uses ``np.arange(n) / fs``.
+    filter_order : int
+        Butterworth filter order per direction (applied forward-backward,
+        so effective order is ``2 * filter_order``). Default 4.
+    smooth_sec : float, optional
+        If provided, smooth each envelope with a causal moving-average
+        kernel of this duration (seconds). Useful for de-noising the
+        instantaneous estimate without losing much temporal resolution.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with one DataArray per band, all shape ``(n_samples,)``
+        with a ``time`` coordinate.
+    """
+    nyq = fs / 2.0
+    n = len(signal)
+    if time is None:
+        time = np.arange(n) / fs
+
+    data_vars = {}
+    for name, (lo, hi) in bands.items():
+        # Bandpass filter (zero-phase Butterworth)
+        sos = butter(filter_order, [lo / nyq, hi / nyq], btype="band", output="sos")
+        filtered = sosfiltfilt(sos, signal)
+
+        # Hilbert transform → instantaneous power
+        analytic = hilbert(filtered)
+        power = np.real(analytic * np.conj(analytic))  # = |analytic|², avoids sqrt
+
+        # Optional moving-average smoothing
+        if smooth_sec is not None:
+            kernel_size = max(int(smooth_sec * fs), 1)
+            if kernel_size > 1:
+                cumsum = np.cumsum(np.insert(power, 0, 0))
+                power = (cumsum[kernel_size:] - cumsum[:-kernel_size]) / kernel_size
+                # Pad to original length (center the kernel)
+                pad_left = kernel_size // 2
+                pad_right = n - len(power) - pad_left
+                power = np.pad(power, (pad_left, pad_right), mode="edge")
+
+        data_vars[name] = xr.DataArray(
+            power.astype(np.float64), dims="time", coords={"time": time}
+        )
+
+    ds = xr.Dataset(data_vars)
+    ds.attrs["method"] = "hilbert_envelope"
+    ds.attrs["fs"] = fs
+    ds.attrs["filter_order"] = filter_order
+    if smooth_sec is not None:
+        ds.attrs["smooth_sec"] = smooth_sec
+    return ds
