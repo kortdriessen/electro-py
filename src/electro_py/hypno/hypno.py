@@ -7,7 +7,9 @@ each with a state label, start time, end time, and duration.
 from __future__ import annotations
 
 import re
+import warnings
 from collections import namedtuple
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from datetime import time as dt_time
 from enum import Enum, auto
@@ -115,9 +117,7 @@ class Hypnogram:
             try:
                 df = pl.from_pandas(data)
             except Exception as exc:
-                raise TypeError(
-                    f"Cannot create Hypnogram from {type(data)}"
-                ) from exc
+                raise TypeError(f"Cannot create Hypnogram from {type(data)}") from exc
 
         # Validate required columns
         required = {"state", "start_time", "end_time"}
@@ -257,14 +257,10 @@ class Hypnogram:
         dur_value = self._duration_scalar(cumulative_duration)
         zero = self._zero
 
-        df = self._df.with_columns(
-            pl.col("duration").cum_sum().alias("_cumsum")
-        )
+        df = self._df.with_columns(pl.col("duration").cum_sum().alias("_cumsum"))
 
         if trim:
-            df = df.with_columns(
-                (pl.col("_cumsum") - dur_value).alias("_excess")
-            )
+            df = df.with_columns((pl.col("_cumsum") - dur_value).alias("_excess"))
             excess_df = df.filter(pl.col("_excess") > zero)
             if excess_df.is_empty():
                 return self
@@ -272,9 +268,7 @@ class Hypnogram:
             trim_until = cutoff["end_time"] - cutoff["_excess"]
             return self.trim(self.start, trim_until)
         else:
-            return Hypnogram(
-                df.filter(pl.col("_cumsum") <= dur_value).drop("_cumsum")
-            )
+            return Hypnogram(df.filter(pl.col("_cumsum") <= dur_value).drop("_cumsum"))
 
     def keep_last(self, cumulative_duration, trim: bool = True) -> Hypnogram:
         """Keep bouts from the end until *cumulative_duration* is reached.
@@ -293,16 +287,12 @@ class Hypnogram:
         df = self._df.with_columns(rcumsum.alias("_rcumsum"))
 
         if trim:
-            df = df.with_columns(
-                (pl.col("_rcumsum") - dur_value).alias("_excess")
-            )
+            df = df.with_columns((pl.col("_rcumsum") - dur_value).alias("_excess"))
             excess_df = df.filter(pl.col("_excess") > zero)
             if excess_df.is_empty():
                 return self
             # Last row with excess (latest start_time, smallest excess)
-            cutoff = excess_df.sort("start_time", descending=True).row(
-                0, named=True
-            )
+            cutoff = excess_df.sort("start_time", descending=True).row(0, named=True)
             trim_from = cutoff["start_time"] + cutoff["_excess"]
             return self.trim(trim_from, self.end)
         else:
@@ -318,18 +308,18 @@ class Hypnogram:
         if start > end:
             raise ValueError(f"start ({start}) must be <= end ({end})")
 
-        df = (
-            self._df.with_columns(
-                pl.when(pl.col("start_time") < start)
-                .then(pl.lit(start))
-                .otherwise(pl.col("start_time"))
-                .alias("start_time"),
-                pl.when(pl.col("end_time") > end)
-                .then(pl.lit(end))
-                .otherwise(pl.col("end_time"))
-                .alias("end_time"),
-            ).filter(pl.col("start_time") < pl.col("end_time"))
-        )
+        df = self._df.with_columns(
+            pl
+            .when(pl.col("start_time") < start)
+            .then(pl.lit(start))
+            .otherwise(pl.col("start_time"))
+            .alias("start_time"),
+            pl
+            .when(pl.col("end_time") > end)
+            .then(pl.lit(end))
+            .otherwise(pl.col("end_time"))
+            .alias("end_time"),
+        ).filter(pl.col("start_time") < pl.col("end_time"))
         return Hypnogram(df)
 
     def keep_between(self, start, end) -> Hypnogram:
@@ -362,15 +352,14 @@ class Hypnogram:
         e_ok = pl.col("end_time").dt.time()
 
         if start_time <= end_time:
-            mask = (
-                s_ok.is_between(start_time, end_time)
-                & e_ok.is_between(start_time, end_time)
+            mask = s_ok.is_between(start_time, end_time) & e_ok.is_between(
+                start_time, end_time
             )
         else:
             # Wraps around midnight
-            mask = (
-                (s_ok >= start_time) | (s_ok <= end_time)
-            ) & ((e_ok >= start_time) | (e_ok <= end_time))
+            mask = ((s_ok >= start_time) | (s_ok <= end_time)) & (
+                (e_ok >= start_time) | (e_ok <= end_time)
+            )
 
         return Hypnogram(self._df.filter(mask))
 
@@ -394,15 +383,11 @@ class Hypnogram:
                 agg_exprs.append(pl.col(col).first())
 
         merged = (
-            df.group_by("_group", maintain_order=True)
-            .agg(agg_exprs)
-            .drop("_group")
+            df.group_by("_group", maintain_order=True).agg(agg_exprs).drop("_group")
         )
         return Hypnogram(merged)
 
-    def states_by_duration(
-        self, states: list[str], duration=None
-    ) -> Hypnogram:
+    def states_by_duration(self, states: list[str], duration=None) -> Hypnogram:
         """Keep bouts of *states*, optionally filtering by minimum *duration*."""
         h = self.keep_states(states)
         return h.keep_longer(duration) if duration is not None else h
@@ -435,8 +420,7 @@ class Hypnogram:
         """
         if column not in self._df.columns:
             raise ValueError(
-                f"Column '{column}' not in hypnogram. "
-                f"Available: {self._df.columns}"
+                f"Column '{column}' not in hypnogram. Available: {self._df.columns}"
             )
 
         times_array = np.asarray(times)
@@ -450,9 +434,7 @@ class Hypnogram:
         end_idx = np.searchsorted(end_times, times_array, side="left")
 
         valid = (
-            (start_idx == end_idx)
-            & (start_idx >= 0)
-            & (start_idx < len(labels_col))
+            (start_idx == end_idx) & (start_idx >= 0) & (start_idx < len(labels_col))
         )
         labels[valid] = labels_col[start_idx[valid]]
         return labels
@@ -467,14 +449,10 @@ class Hypnogram:
         end_idx = np.searchsorted(end_times, times_array, side="left")
 
         return (
-            (start_idx == end_idx)
-            & (start_idx >= 0)
-            & (start_idx < len(start_times))
+            (start_idx == end_idx) & (start_idx >= 0) & (start_idx < len(start_times))
         )
 
-    def mask_times_by_state(
-        self, times, states: list[str]
-    ) -> np.ndarray:
+    def mask_times_by_state(self, times, states: list[str]) -> np.ndarray:
         """Boolean mask — ``True`` where *times* fall within *states*."""
         return self.keep_states(states).covers_time(times)
 
@@ -501,7 +479,8 @@ class Hypnogram:
                 total = span.total_seconds()
 
         return (
-            self._df.group_by("state")
+            self._df
+            .group_by("state")
             .agg(dur_expr.sum().alias("seconds"))
             .with_columns((pl.col("seconds") / total).alias("fraction"))
             .sort("fraction", descending=True)
@@ -520,38 +499,25 @@ class Hypnogram:
         tol = self._duration_scalar(tolerance)
 
         if len(self._df) < 2:
-            return pl.DataFrame(
-                {
-                    "start_time": pl.Series(
-                        [], dtype=self._df.schema["start_time"]
-                    ),
-                    "end_time": pl.Series(
-                        [], dtype=self._df.schema["end_time"]
-                    ),
-                    "duration": pl.Series(
-                        [], dtype=self._df.schema["duration"]
-                    ),
-                }
-            )
+            return pl.DataFrame({
+                "start_time": pl.Series([], dtype=self._df.schema["start_time"]),
+                "end_time": pl.Series([], dtype=self._df.schema["end_time"]),
+                "duration": pl.Series([], dtype=self._df.schema["duration"]),
+            })
 
         return (
-            self._df.with_columns(
-                pl.col("start_time").shift(-1).alias("_next_start")
-            )
+            self._df
+            .with_columns(pl.col("start_time").shift(-1).alias("_next_start"))
             .filter(pl.col("_next_start").is_not_null())
             .select(
                 pl.col("end_time").alias("start_time"),
                 pl.col("_next_start").alias("end_time"),
             )
-            .with_columns(
-                (pl.col("end_time") - pl.col("start_time")).alias("duration")
-            )
+            .with_columns((pl.col("end_time") - pl.col("start_time")).alias("duration"))
             .filter(pl.col("duration") > tol)
         )
 
-    def fill_gaps(
-        self, tolerance=0, fill_state: str = "None"
-    ) -> Hypnogram:
+    def fill_gaps(self, tolerance=0, fill_state: str = "None") -> Hypnogram:
         """Fill unscored gaps with *fill_state*.
 
         Parameters
@@ -579,9 +545,7 @@ class Hypnogram:
             gap_df = gap_df.with_columns(pl.lit(None).alias(col))
 
         select_cols = ["state", "start_time", "end_time"] + extra
-        combined = pl.concat(
-            [self._df.select(select_cols), gap_df.select(select_cols)]
-        )
+        combined = pl.concat([self._df.select(select_cols), gap_df.select(select_cols)])
         return Hypnogram(combined)
 
     def get_consolidated(
@@ -691,9 +655,7 @@ class Hypnogram:
         elif how == "other":
             return reconcile_hypnograms(other, self)
         else:
-            raise ValueError(
-                f"Argument `how` should be 'self' or 'other'. Got {how}."
-            )
+            raise ValueError(f"Argument `how` should be 'self' or 'other'. Got {how}.")
 
     # ----------------------------------------------------------- conversion
 
@@ -742,17 +704,13 @@ class Hypnogram:
             (
                 pl.lit(start_datetime)
                 + pl.duration(
-                    microseconds=(pl.col("start_time") * 1_000_000).cast(
-                        pl.Int64
-                    )
+                    microseconds=(pl.col("start_time") * 1_000_000).cast(pl.Int64)
                 )
             ).alias("start_time"),
             (
                 pl.lit(start_datetime)
                 + pl.duration(
-                    microseconds=(pl.col("end_time") * 1_000_000).cast(
-                        pl.Int64
-                    )
+                    microseconds=(pl.col("end_time") * 1_000_000).cast(pl.Int64)
                 )
             ).alias("end_time"),
         ).drop("duration")
@@ -784,9 +742,7 @@ class Hypnogram:
         separator: str = ",",
     ) -> Hypnogram:
         """Load from a CSV with configurable column names."""
-        df = pl.read_csv(
-            str(path), separator=separator, try_parse_dates=True
-        )
+        df = pl.read_csv(str(path), separator=separator, try_parse_dates=True)
         rename: dict[str, str] = {}
         if state_col != "state" and state_col in df.columns:
             rename[state_col] = "state"
@@ -865,9 +821,11 @@ class Hypnogram:
         )
         # First 3 columns: start_time (datetime), epoch (int), state (str)
         cols = df.columns[:3]
-        df = df.select(cols).rename(
-            {cols[0]: "start_time", cols[1]: "epoch", cols[2]: "state"}
-        )
+        df = df.select(cols).rename({
+            cols[0]: "start_time",
+            cols[1]: "epoch",
+            cols[2]: "state",
+        })
 
         assert df["epoch"][0] == 0, (
             "First epoch is not #0. Unexpected number of header lines?"
@@ -877,16 +835,12 @@ class Hypnogram:
         t0 = df["start_time"][0]
         if "Datetime" in str(df.schema["start_time"]):
             df = df.with_columns(
-                ((pl.col("start_time") - t0).dt.total_seconds()).alias(
-                    "start_time"
-                )
+                ((pl.col("start_time") - t0).dt.total_seconds()).alias("start_time")
             )
 
         # Verify uniform epoch length
         epoch_diffs = df["start_time"].diff().drop_nulls()
-        assert epoch_diffs.n_unique() == 1, (
-            "Epochs are not all the same length"
-        )
+        assert epoch_diffs.n_unique() == 1, "Epochs are not all the same length"
         epoch_length = epoch_diffs[0]
 
         df = df.with_columns(
@@ -914,13 +868,11 @@ class Hypnogram:
     ) -> Hypnogram:
         """Create a single-bout placeholder hypnogram."""
         return cls(
-            pl.DataFrame(
-                {
-                    "state": ["None"],
-                    "start_time": [float(start_time)],
-                    "end_time": [float(end_time)],
-                }
-            )
+            pl.DataFrame({
+                "state": ["None"],
+                "start_time": [float(start_time)],
+                "end_time": [float(end_time)],
+            })
         )
 
     # -------------------------------------------------------- I/O — writers
@@ -947,6 +899,26 @@ class Hypnogram:
             str(path), separator="\t", include_header=False
         )
 
+    def write_loupe(self, path: str | Path) -> None:
+        """Write in loupe format (float times only)."""
+        if self._time_kind != TimeKind.FLOAT:
+            raise ValueError(
+                "Loupe format requires float times. Use .as_float() first."
+            )
+        df = self._df.select(
+            [
+                pl.col("start_time").alias("start_s"),
+                pl.col("end_time").alias("end_s"),
+                pl.col("state").alias("label"),
+            ]
+            + [
+                c
+                for c in self._df.columns
+                if c not in ("start_time", "end_time", "state")
+            ]
+        )
+        df.write_csv(str(path), separator=",", include_header=True)
+
 
 # ---------------------------------------------------------------------------
 # Module-level functions
@@ -968,24 +940,16 @@ def reconcile_hypnograms(h1: Hypnogram, h2: Hypnogram) -> Hypnogram:
 
         # Drop identical intervals
         h2_df = h2_df.filter(
-            ~(
-                (pl.col("start_time") == r_start)
-                & (pl.col("end_time") == r_end)
-            )
+            ~((pl.col("start_time") == r_start) & (pl.col("end_time") == r_end))
         )
 
         # Drop sub-intervals wholly contained by this h1 row
         h2_df = h2_df.filter(
-            ~(
-                (pl.col("start_time") >= r_start)
-                & (pl.col("end_time") <= r_end)
-            )
+            ~((pl.col("start_time") >= r_start) & (pl.col("end_time") <= r_end))
         )
 
         # Split super-intervals that wholly contain this h1 row
-        super_mask = (pl.col("start_time") <= r_start) & (
-            pl.col("end_time") >= r_end
-        )
+        super_mask = (pl.col("start_time") <= r_start) & (pl.col("end_time") >= r_end)
         super_df = h2_df.filter(super_mask)
         if len(super_df) > 0:
             assert len(super_df) == 1, (
@@ -996,23 +960,19 @@ def reconcile_hypnograms(h1: Hypnogram, h2: Hypnogram) -> Hypnogram:
             fragments: list[pl.DataFrame] = []
             if sup["start_time"] < r_start:
                 fragments.append(
-                    pl.DataFrame(
-                        {
-                            "state": [sup["state"]],
-                            "start_time": [sup["start_time"]],
-                            "end_time": [r_start],
-                        }
-                    )
+                    pl.DataFrame({
+                        "state": [sup["state"]],
+                        "start_time": [sup["start_time"]],
+                        "end_time": [r_start],
+                    })
                 )
             if sup["end_time"] > r_end:
                 fragments.append(
-                    pl.DataFrame(
-                        {
-                            "state": [sup["state"]],
-                            "start_time": [r_end],
-                            "end_time": [sup["end_time"]],
-                        }
-                    )
+                    pl.DataFrame({
+                        "state": [sup["state"]],
+                        "start_time": [r_end],
+                        "end_time": [sup["end_time"]],
+                    })
                 )
             if fragments:
                 h2_df = pl.concat([h2_df.select(core)] + fragments)
@@ -1025,7 +985,8 @@ def reconcile_hypnograms(h1: Hypnogram, h2: Hypnogram) -> Hypnogram:
         )
         if h2_df.filter(left_mask).height > 0:
             h2_df = h2_df.with_columns(
-                pl.when(left_mask)
+                pl
+                .when(left_mask)
                 .then(pl.lit(r_start))
                 .otherwise(pl.col("end_time"))
                 .alias("end_time")
@@ -1039,7 +1000,8 @@ def reconcile_hypnograms(h1: Hypnogram, h2: Hypnogram) -> Hypnogram:
         )
         if h2_df.filter(right_mask).height > 0:
             h2_df = h2_df.with_columns(
-                pl.when(right_mask)
+                pl
+                .when(right_mask)
                 .then(pl.lit(r_end))
                 .otherwise(pl.col("start_time"))
                 .alias("start_time")
@@ -1047,6 +1009,198 @@ def reconcile_hypnograms(h1: Hypnogram, h2: Hypnogram) -> Hypnogram:
 
     combined = pl.concat([h1_df, h2_df.select(core)]).sort("start_time")
     return Hypnogram(combined)
+
+
+# ---------------------------------------------------------------------------
+# Multi-hypnogram unification
+# ---------------------------------------------------------------------------
+
+ConflictRecord = namedtuple(
+    "ConflictRecord",
+    [
+        "winner_label",
+        "loser_label",
+        "start_time",
+        "end_time",
+        "winner_state",
+        "loser_state",
+    ],
+)
+
+
+def _find_overlap_conflicts(
+    winner: Hypnogram,
+    loser: Hypnogram,
+    winner_label: str,
+    loser_label: str,
+) -> list[ConflictRecord]:
+    """Find overlapping regions where *winner* and *loser* disagree on state."""
+    w_rows = winner.df.select("state", "start_time", "end_time").to_dicts()
+    l_rows = loser.df.select("state", "start_time", "end_time").to_dicts()
+
+    conflicts: list[ConflictRecord] = []
+    j = 0
+    for wr in w_rows:
+        # advance past loser bouts that end before this winner bout starts
+        while j < len(l_rows) and l_rows[j]["end_time"] <= wr["start_time"]:
+            j += 1
+        for k in range(j, len(l_rows)):
+            lr = l_rows[k]
+            if lr["start_time"] >= wr["end_time"]:
+                break
+            # overlap exists
+            if wr["state"] != lr["state"]:
+                conflicts.append(
+                    ConflictRecord(
+                        winner_label=winner_label,
+                        loser_label=loser_label,
+                        start_time=max(wr["start_time"], lr["start_time"]),
+                        end_time=min(wr["end_time"], lr["end_time"]),
+                        winner_state=wr["state"],
+                        loser_state=lr["state"],
+                    )
+                )
+    return conflicts
+
+
+def _resolve_sort_key(
+    sort_key: Callable[[Path], object] | str,
+) -> Callable[[Path], object]:
+    """Turn a sort_key name or callable into a key function for sorted()."""
+    if sort_key == "name":
+        return lambda p: p.name
+    if sort_key == "mtime":
+        return lambda p: p.stat().st_mtime
+    if not callable(sort_key):
+        raise ValueError(
+            f"sort_key must be 'name', 'mtime', or a callable, got {sort_key!r}"
+        )
+    return sort_key  # type: ignore[return-value]
+
+
+def unify_hypnograms(
+    hypnograms: Sequence[tuple[str, Hypnogram]],
+    *,
+    priority: str = "last",
+    warn_conflicts: bool = True,
+) -> tuple[Hypnogram, list[ConflictRecord]]:
+    """Sequentially reconcile multiple labelled hypnograms into one.
+
+    Parameters
+    ----------
+    hypnograms : sequence of (label, Hypnogram) pairs
+        The hypnograms to merge, **in the desired merge order**.
+        The order determines conflict resolution: with ``priority="last"``,
+        later entries override earlier ones in overlapping regions.
+    priority : ``"first"`` or ``"last"``
+        ``"last"`` (default): later hypnograms win conflicts (natural for
+        versioned files where later versions are corrections).
+        ``"first"``: earlier hypnograms win conflicts.
+    warn_conflicts : bool
+        If ``True``, emit a ``UserWarning`` for each pair that has
+        overlapping regions with different state labels.
+
+    Returns
+    -------
+    unified : Hypnogram
+        The merged result (consecutive identical states are merged).
+    conflicts : list[ConflictRecord]
+        A record of every conflict that was resolved, including which
+        hypnogram won and what the competing states were.
+    """
+    if not hypnograms:
+        raise ValueError("No hypnograms to unify.")
+    if len(hypnograms) == 1:
+        return hypnograms[0][1], []
+
+    if priority not in ("first", "last"):
+        raise ValueError(f"priority must be 'first' or 'last', got {priority!r}")
+
+    all_conflicts: list[ConflictRecord] = []
+    _label_acc, h_acc = hypnograms[0]
+
+    for label_new, h_new in hypnograms[1:]:
+        if priority == "last":
+            winner_h, loser_h = h_new, h_acc
+            winner_label, loser_label = label_new, _label_acc
+        else:
+            winner_h, loser_h = h_acc, h_new
+            winner_label, loser_label = _label_acc, label_new
+
+        pair_conflicts = _find_overlap_conflicts(
+            winner_h,
+            loser_h,
+            winner_label,
+            loser_label,
+        )
+        all_conflicts.extend(pair_conflicts)
+
+        if warn_conflicts and pair_conflicts:
+            warnings.warn(
+                f"Resolved {len(pair_conflicts)} conflict(s) — "
+                f"'{winner_label}' overrides '{loser_label}'.",
+                stacklevel=2,
+            )
+
+        h_acc = reconcile_hypnograms(winner_h, loser_h)
+        _label_acc = f"{_label_acc}+{label_new}"
+
+    return h_acc.merge_consecutive(), all_conflicts
+
+
+def unify_hypno_directory(
+    directory: str | Path,
+    *,
+    loader: Callable[[Path], Hypnogram] | None = None,
+    glob_pattern: str = "*.csv",
+    sort_key: Callable[[Path], object] | str = "name",
+    priority: str = "last",
+    warn_conflicts: bool = True,
+) -> tuple[Hypnogram, list[ConflictRecord]]:
+    """Load and unify all hypnogram files in a directory.
+
+    Parameters
+    ----------
+    directory : str or Path
+        Directory containing hypnogram files.
+    loader : callable, optional
+        ``Path -> Hypnogram``.  Defaults to ``Hypnogram.from_loupe``.
+    glob_pattern : str
+        Glob pattern for file discovery.  Default ``"*.csv"``.
+    sort_key : callable or ``"name"`` or ``"mtime"``
+        How to order the discovered files before merging.
+        ``"name"`` (default): lexicographic by filename.
+        ``"mtime"``: by file modification time.
+        A callable: ``sort_key(path) -> comparable``.
+    priority : ``"first"`` or ``"last"``
+        Which end of the sorted list wins conflicts.
+        Default ``"last"`` (later files override earlier ones).
+    warn_conflicts : bool
+        If ``True``, emit warnings about resolved conflicts.
+
+    Returns
+    -------
+    unified : Hypnogram
+    conflicts : list[ConflictRecord]
+    """
+    directory = Path(directory)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Directory not found: {directory}")
+
+    if loader is None:
+        loader = Hypnogram.from_loupe
+
+    key_fn = _resolve_sort_key(sort_key)
+    files = sorted(directory.glob(glob_pattern), key=key_fn)
+    if not files:
+        raise ValueError(f"No files matching '{glob_pattern}' in {directory}")
+
+    hypnograms = [(f.name, loader(f)) for f in files]
+    return unify_hypnograms(
+        hypnograms,
+        priority=priority,
+        warn_conflicts=warn_conflicts,
+    )
 
 
 def get_separated_wake_hypnogram(
@@ -1063,19 +1217,15 @@ def get_separated_wake_hypnogram(
     qwk = np.asarray(qwk_intervals)
     awk = np.asarray(awk_intervals)
 
-    qwk_df = pl.DataFrame(
-        {
-            "state": ["qWk"] * len(qwk),
-            "start_time": qwk[:, 0].tolist(),
-            "end_time": qwk[:, 1].tolist(),
-        }
-    )
-    awk_df = pl.DataFrame(
-        {
-            "state": ["aWk"] * len(awk),
-            "start_time": awk[:, 0].tolist(),
-            "end_time": awk[:, 1].tolist(),
-        }
-    )
+    qwk_df = pl.DataFrame({
+        "state": ["qWk"] * len(qwk),
+        "start_time": qwk[:, 0].tolist(),
+        "end_time": qwk[:, 1].tolist(),
+    })
+    awk_df = pl.DataFrame({
+        "state": ["aWk"] * len(awk),
+        "start_time": awk[:, 0].tolist(),
+        "end_time": awk[:, 1].tolist(),
+    })
 
     return Hypnogram(pl.concat([qwk_df, awk_df]))
