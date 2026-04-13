@@ -227,9 +227,9 @@ def parallel_spectrogram_welch(sig, fs, **kwargs):
     with Pool(n_chans) as p:
         freqs, spg_times, spg = zip(*p.map(worker, jobs), strict=False)
 
-    assert all_arrays_equal(
-        freqs
-    ), "Spectrogram frequecies must match for all channels."
+    assert all_arrays_equal(freqs), (
+        "Spectrogram frequecies must match for all channels."
+    )
     assert all_arrays_equal(spg_times), "Segment times must match for all channels."
 
     freqs = freqs[0]
@@ -395,18 +395,19 @@ def bandpass_filter_raw_data(sig, f_range):
     filtered = sosfiltfilt(sos, sig.values, axis=sig.dims.index("time"))
     return xr.DataArray(filtered, dims=sig.dims, coords=sig.coords, attrs=sig.attrs)
 
-from scipy.signal import butter, sosfiltfilt, hilbert, spectrogram as scipy_spectrogram
-import xarray as xr
-import time as timer
+
+from scipy.signal import hilbert
+from scipy.signal import spectrogram as scipy_spectrogram
 
 bands = {
-    'delta': (0.5, 4),
-    'theta': (4, 8),
-    'alpha': (8, 12),
-    'sigma': (11, 16),
-    'beta': (12, 30),
-    'gamma': (30, 100)
+    "delta": (0.5, 4),
+    "theta": (4, 8),
+    "alpha": (8, 12),
+    "sigma": (11, 16),
+    "beta": (12, 30),
+    "gamma": (30, 100),
 }
+
 
 def bandpower_hilbert(
     signal: np.ndarray,
@@ -481,4 +482,71 @@ def bandpower_hilbert(
     ds.attrs["filter_order"] = filter_order
     if smooth_sec is not None:
         ds.attrs["smooth_sec"] = smooth_sec
+    return ds
+
+
+def bandpower_stft(
+    signal: np.ndarray,
+    fs: float,
+    bands: dict[str, tuple[float, float]],
+    time_offset: float = 0.0,
+    window_sec: float = 1,
+    step_sec: float = 0.5,
+) -> xr.Dataset:
+    """Compute bandpower via Short-Time Fourier Transform.
+
+    Computes a single spectrogram, then sums power within each band.
+    Temporal resolution is determined by ``step_sec``.
+
+    Parameters
+    ----------
+    signal : 1D array
+        Raw EEG signal.
+    fs : float
+        Sampling rate in Hz.
+    bands : dict
+        ``{name: (low_hz, high_hz)}`` frequency bands.
+    time_offset : float
+        Value added to time coordinates (e.g. the signal's start time).
+    window_sec : float
+        FFT window length in seconds. Default 1.0.
+        Must be long enough to resolve the lowest frequency of interest
+        (≥ 2 / f_low seconds recommended).
+    step_sec : float
+        Step (hop) size in seconds. Default 0.5.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with one DataArray per band, all shape ``(n_time_bins,)``
+        with a ``time`` coordinate.
+    """
+    nperseg = int(window_sec * fs)
+    noverlap = nperseg - int(step_sec * fs)
+
+    freqs, times, Sxx = scipy_spectrogram(
+        signal,
+        fs,
+        window="hann",
+        nperseg=nperseg,
+        noverlap=noverlap,
+        detrend="constant",
+    )
+    times = times + time_offset
+
+    # Frequency resolution for proper integration (power spectral density → power)
+    df = freqs[1] - freqs[0]
+
+    data_vars = {}
+    for name, (lo, hi) in bands.items():
+        f_mask = (freqs >= lo) & (freqs <= hi)
+        # Integrate PSD over band (sum × df) to get absolute power
+        bp = Sxx[f_mask, :].sum(axis=0) * df
+        data_vars[name] = xr.DataArray(bp, dims="time", coords={"time": times})
+
+    ds = xr.Dataset(data_vars)
+    ds.attrs["method"] = "stft"
+    ds.attrs["fs"] = fs
+    ds.attrs["window_sec"] = window_sec
+    ds.attrs["step_sec"] = step_sec
     return ds
